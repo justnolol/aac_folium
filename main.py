@@ -13,6 +13,16 @@ chp_df = aac_df[~(aac_df['Category'] == 'AAC')].copy()
 app = Flask(__name__)
 app.secret_key = "secret_key_123"
 
+@app.after_request
+def allow_embedding(response):
+    # Remove older header if Vercel injected it
+    response.headers.pop('X-Frame-Options', None)
+    
+    # Modern approach: Allow any site to embed via CSP
+    response.headers['Content-Security-Policy'] = "frame-ancestors *;"
+    
+    return response
+
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -223,9 +233,7 @@ def index():
 
                     # Draw routes & render markers
                     for i, row, route in route_results:
-                        # 1. Draw PolyLine only if coordinates exist and start/end are not identical
                         if isinstance(route, dict) and route.get("coords"):
-                            # Avoid drawing 0-length polylines if coords only has 1 unique point
                             if len(route["coords"]) > 1:
                                 folium.PolyLine(
                                     route["coords"],
@@ -265,7 +273,6 @@ def index():
                         for step in instructions:
                             popup_html += f"- {step}<br>"
 
-                        # Always drop the destination marker (even if dist == 0)
                         folium.Marker(
                             location=[row["latitude"], row["longitude"]],
                             popup=folium.Popup(popup_html, max_width=320),
@@ -284,16 +291,7 @@ def index():
 
                         all_coords.append([row["latitude"], row["longitude"]])
 
-                    #if all_coords:
-                        # # Deduplicate coordinates before fitting bounds to avoid zero-swatch Leaflet errors
-                        # unique_coords = [list(x) for x in set(tuple(c) for c in all_coords)]
-                        # if len(unique_coords) == 1:
-                        #     folium_map.location = unique_coords[0]
-                        #     folium_map.zoom_start = 16
-                        # else:
-                        #     folium_map.fit_bounds(unique_coords)
                     if all_coords:
-                    # Safe deduplication using standard list comprehension
                         unique_coords = []
                         for c in all_coords:
                             coord_pair = [float(c[0]), float(c[1])]
@@ -320,3 +318,4 @@ def index():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
     app.run(host="0.0.0.0", port=port, debug=False)
+
